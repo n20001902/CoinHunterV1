@@ -1,6 +1,9 @@
 package com.example.coinhunter;
 
 import android.app.Activity;
+import android.media.projection.MediaProjectionManager;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -12,9 +15,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
+    private static final int SCREEN_CAPTURE_REQUEST = 1001;
+
     private TextView status;
     private Button monitorButton;
     private boolean monitoring = false;
+    private MediaProjectionManager projectionManager;
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -29,64 +35,127 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    @Override public void onCreate(Bundle savedInstanceState) {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        projectionManager = (MediaProjectionManager)
+                getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+
         getWindow().setStatusBarColor(Color.rgb(245,247,246));
         getWindow().setNavigationBarColor(Color.rgb(245,247,246));
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR |
+                View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        );
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(22), dp(28), dp(22), dp(22));
         root.setBackgroundColor(Color.rgb(245,247,246));
 
-        TextView title = text("Coin Hunter V1", 27, true, Color.rgb(25,35,30));
-        root.addView(title);
-        TextView subtitle = text("Trợ lý theo dõi phần thưởng LIVE", 14, false, Color.rgb(95,105,100));
-        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
-        subLp.topMargin = dp(5); root.addView(subtitle, subLp);
+        root.addView(text("Coin Hunter V2", 27, true, Color.rgb(25,35,30)));
+        root.addView(text("Trợ lý theo dõi phần thưởng LIVE", 14, false,
+                Color.rgb(95,105,100)));
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackgroundColor(Color.WHITE);
-        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
-        cardLp.topMargin = dp(26); root.addView(card, cardLp);
-        card.addView(text("TÀI KHOẢN 01", 12, true, Color.rgb(95,105,100)));
-        TextView count = text("—", 38, true, Color.rgb(22,134,91));
-        LinearLayout.LayoutParams countLp = new LinearLayout.LayoutParams(-1, -2);
-        countLp.topMargin = dp(12); card.addView(count, countLp);
-        card.addView(text("Xu đã xác nhận trong phiên", 13, false, Color.rgb(95,105,100)));
 
-        status = text("Chưa bắt đầu theo dõi", 15, true, Color.rgb(50,60,55));
-        LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(-1, -2);
-        statusLp.topMargin = dp(22); root.addView(status, statusLp);
+        LinearLayout.LayoutParams cardLp =
+                new LinearLayout.LayoutParams(-1, -2);
+        cardLp.topMargin = dp(26);
+        root.addView(card, cardLp);
+
+        card.addView(text("TÀI KHOẢN 01", 12, true,
+                Color.rgb(95,105,100)));
+
+        card.addView(text("—", 38, true, Color.rgb(22,134,91)));
+
+        card.addView(text("Xu đã xác nhận trong phiên", 13, false,
+                Color.rgb(95,105,100)));
+
+        status = text("Chưa cấp quyền chia sẻ màn hình", 15, true,
+                Color.rgb(50,60,55));
+
+        LinearLayout.LayoutParams statusLp =
+                new LinearLayout.LayoutParams(-1, -2);
+        statusLp.topMargin = dp(22);
+        root.addView(status, statusLp);
 
         monitorButton = new Button(this);
-        monitorButton.setText("BẮT ĐẦU THEO DÕI");
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
-        btnLp.topMargin = dp(14); root.addView(monitorButton, btnLp);
+        monitorButton.setText("CHO PHÉP ĐỌC MÀN HÌNH");
+
+        LinearLayout.LayoutParams btnLp =
+                new LinearLayout.LayoutParams(-1, -2);
+        btnLp.topMargin = dp(14);
+        root.addView(monitorButton, btnLp);
+
         monitorButton.setOnClickListener(v -> {
-            monitoring = !monitoring;
-            status.setText(monitoring ? "Đang ở chế độ chuẩn bị theo dõi" : "Đã dừng");
-            monitorButton.setText(monitoring ? "DỪNG" : "BẮT ĐẦU THEO DÕI");
+            if (!monitoring) {
+                Intent captureIntent =
+                        projectionManager.createScreenCaptureIntent();
+                startActivityForResult(
+                        captureIntent,
+                        SCREEN_CAPTURE_REQUEST
+                );
+            } else {
+                monitoring = false;
+                status.setText("Đã dừng theo dõi");
+                monitorButton.setText("CHO PHÉP ĐỌC MÀN HÌNH");
+            }
         });
 
-        TextView note = text("LƯU Ý VỀ BẢN V1", 13, true, Color.rgb(45,55,50));
-        LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
-        noteLp.topMargin = dp(28); root.addView(note, noteLp);
-        TextView details = text("Đây là bộ khung giao diện thử nghiệm. Bản này CHƯA đọc màn hình TikTok, chưa nhận diện nút xu và chưa tự nhấn. Các chức năng đó cần được phát triển, kiểm thử và chỉ bật khi phù hợp với quy định TikTok. Không có cách nào bảo đảm tài khoản không bị quét hoặc hạn chế.", 14, false, Color.rgb(85,95,90));
-        details.setLineSpacing(dp(4), 1f);
-        LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(-1, -2);
-        detailLp.topMargin = dp(9); root.addView(details, detailLp);
+        TextView note = text("TRẠNG THÁI PHÁT TRIỂN", 13, true,
+                Color.rgb(45,55,50));
 
-        TextView footer = text("Thiết kế cho Android • 1 tài khoản • Không yêu cầu root", 12, false, Color.rgb(120,128,124));
+        LinearLayout.LayoutParams noteLp =
+                new LinearLayout.LayoutParams(-1, -2);
+        noteLp.topMargin = dp(28);
+        root.addView(note, noteLp);
+
+        TextView details = text(
+                "Bản V2 đang thử nghiệm chức năng xin quyền chia sẻ màn hình. " +
+                "Chưa nhận diện hộp quà, chưa đọc đồng hồ và chưa tự nhấn. " +
+                "Bạn cần xác nhận quyền trên Android trước khi chia sẻ màn hình.",
+                14, false, Color.rgb(85,95,90)
+        );
+        details.setLineSpacing(dp(4), 1f);
+
+        root.addView(details);
+
+        TextView footer = text(
+                "Android • 1 tài khoản • Không yêu cầu root",
+                12, false, Color.rgb(120,128,124)
+        );
         footer.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams footLp = new LinearLayout.LayoutParams(-1, -2);
-        footLp.topMargin = dp(28); root.addView(footer, footLp);
+
+        LinearLayout.LayoutParams footLp =
+                new LinearLayout.LayoutParams(-1, -2);
+        footLp.topMargin = dp(28);
+        root.addView(footer, footLp);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
         setContentView(scroll);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode,
+                                    Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == SCREEN_CAPTURE_REQUEST) {
+            if (resultCode == RESULT_OK && data != null) {
+                monitoring = true;
+                status.setText("Đã được cấp quyền chia sẻ màn hình");
+                monitorButton.setText("DỪNG");
+            } else {
+                monitoring = false;
+                status.setText("Bạn chưa cấp quyền chia sẻ màn hình");
+                monitorButton.setText("CHO PHÉP ĐỌC MÀN HÌNH");
+            }
+        }
     }
 }
