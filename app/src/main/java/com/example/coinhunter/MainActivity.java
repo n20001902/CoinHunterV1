@@ -1,9 +1,11 @@
 package com.example.coinhunter;
 
 import android.app.Activity;
-import android.media.projection.MediaProjectionManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.media.projection.MediaProjectionManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -15,12 +17,42 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
+
     private static final int SCREEN_CAPTURE_REQUEST = 1001;
 
     private TextView status;
+    private TextView countdown;
     private Button monitorButton;
-    private boolean monitoring = false;
     private MediaProjectionManager projectionManager;
+    private boolean monitoring = false;
+    private boolean receiverRegistered = false;
+
+    private final android.content.BroadcastReceiver ocrReceiver =
+            new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!ScreenCaptureService.ACTION_OCR.equals(intent.getAction())) return;
+
+            int seconds = intent.getIntExtra(
+                    ScreenCaptureService.EXTRA_SECONDS, -1
+            );
+
+            if (seconds >= 0) {
+                int minutes = seconds / 60;
+                int remain = seconds % 60;
+
+                countdown.setText(String.format(
+                        java.util.Locale.US, "%02d:%02d", minutes, remain
+                ));
+
+                if (seconds <= 3) {
+                    status.setText("ĐẾM NGƯỢC! HÃY NHẤN NGAY");
+                } else {
+                    status.setText("Đang theo dõi đồng hồ");
+                }
+            }
+        }
+    };
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -42,6 +74,15 @@ public class MainActivity extends Activity {
         projectionManager = (MediaProjectionManager)
                 getSystemService(Context.MEDIA_PROJECTION_SERVICE);
 
+        IntentFilter filter = new IntentFilter(ScreenCaptureService.ACTION_OCR);
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(ocrReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(ocrReceiver, filter);
+        }
+        receiverRegistered = true;
+
         getWindow().setStatusBarColor(Color.rgb(245,247,246));
         getWindow().setNavigationBarColor(Color.rgb(245,247,246));
         getWindow().getDecorView().setSystemUiVisibility(
@@ -54,7 +95,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(22), dp(28), dp(22), dp(22));
         root.setBackgroundColor(Color.rgb(245,247,246));
 
-        root.addView(text("Coin Hunter V2", 27, true, Color.rgb(25,35,30)));
+        root.addView(text("Coin Hunter V3", 27, true, Color.rgb(25,35,30)));
         root.addView(text("Trợ lý theo dõi phần thưởng LIVE", 14, false,
                 Color.rgb(95,105,100)));
 
@@ -68,13 +109,12 @@ public class MainActivity extends Activity {
         cardLp.topMargin = dp(26);
         root.addView(card, cardLp);
 
-        card.addView(text("TÀI KHOẢN 01", 12, true,
+        card.addView(text("ĐỒNG HỒ ĐẾM NGƯỢC", 13, true,
                 Color.rgb(95,105,100)));
 
-        card.addView(text("—", 38, true, Color.rgb(22,134,91)));
-
-        card.addView(text("Xu đã xác nhận trong phiên", 13, false,
-                Color.rgb(95,105,100)));
+        countdown = text("--:--", 42, true, Color.rgb(22,134,91));
+        countdown.setGravity(Gravity.CENTER);
+        card.addView(countdown);
 
         status = text("Chưa cấp quyền chia sẻ màn hình", 15, true,
                 Color.rgb(50,60,55));
@@ -101,40 +141,30 @@ public class MainActivity extends Activity {
                         SCREEN_CAPTURE_REQUEST
                 );
             } else {
+                Intent stopIntent = new Intent(
+                        this, ScreenCaptureService.class
+                );
+                stopIntent.setAction(ScreenCaptureService.ACTION_STOP);
+                startService(stopIntent);
+
                 monitoring = false;
                 status.setText("Đã dừng theo dõi");
+                countdown.setText("--:--");
                 monitorButton.setText("CHO PHÉP ĐỌC MÀN HÌNH");
             }
         });
 
-        TextView note = text("TRẠNG THÁI PHÁT TRIỂN", 13, true,
-                Color.rgb(45,55,50));
-
-        LinearLayout.LayoutParams noteLp =
-                new LinearLayout.LayoutParams(-1, -2);
-        noteLp.topMargin = dp(28);
-        root.addView(note, noteLp);
-
         TextView details = text(
-                "Bản V2 đang thử nghiệm chức năng xin quyền chia sẻ màn hình. " +
-                "Chưa nhận diện hộp quà, chưa đọc đồng hồ và chưa tự nhấn. " +
-                "Bạn cần xác nhận quyền trên Android trước khi chia sẻ màn hình.",
+                "Coin Hunter đọc đồng hồ trên màn hình và phát tiếng bíp " +
+                "khi nhận diện còn 3 giây hoặc ít hơn. Bạn tự nhấn để nhận thưởng.",
                 14, false, Color.rgb(85,95,90)
         );
         details.setLineSpacing(dp(4), 1f);
 
-        root.addView(details);
-
-        TextView footer = text(
-                "Android • 1 tài khoản • Không yêu cầu root",
-                12, false, Color.rgb(120,128,124)
-        );
-        footer.setGravity(Gravity.CENTER);
-
-        LinearLayout.LayoutParams footLp =
+        LinearLayout.LayoutParams detailLp =
                 new LinearLayout.LayoutParams(-1, -2);
-        footLp.topMargin = dp(28);
-        root.addView(footer, footLp);
+        detailLp.topMargin = dp(26);
+        root.addView(details, detailLp);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
@@ -148,8 +178,25 @@ public class MainActivity extends Activity {
 
         if (requestCode == SCREEN_CAPTURE_REQUEST) {
             if (resultCode == RESULT_OK && data != null) {
+                Intent serviceIntent = new Intent(
+                        this, ScreenCaptureService.class
+                );
+                serviceIntent.setAction(ScreenCaptureService.ACTION_START);
+                serviceIntent.putExtra(
+                        ScreenCaptureService.EXTRA_RESULT, resultCode
+                );
+                serviceIntent.putExtra(
+                        ScreenCaptureService.EXTRA_DATA, data
+                );
+
+                if (Build.VERSION.SDK_INT >= 26) {
+                    startForegroundService(serviceIntent);
+                } else {
+                    startService(serviceIntent);
+                }
+
                 monitoring = true;
-                status.setText("Đã được cấp quyền chia sẻ màn hình");
+                status.setText("Đang khởi động nhận diện màn hình...");
                 monitorButton.setText("DỪNG");
             } else {
                 monitoring = false;
@@ -157,5 +204,14 @@ public class MainActivity extends Activity {
                 monitorButton.setText("CHO PHÉP ĐỌC MÀN HÌNH");
             }
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (receiverRegistered) {
+            unregisterReceiver(ocrReceiver);
+            receiverRegistered = false;
+        }
+        super.onDestroy();
     }
 }
